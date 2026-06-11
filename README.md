@@ -8,6 +8,12 @@ Google account — nothing is hosted locally.
 The app is hosted for free on **Google Apps Script** (the form is served from a
 `script.google.com` link) and the data lives in a **Google Sheet**.
 
+## Live form
+
+**👉 [Open the Daily Time Check-in form](https://script.google.com/macros/s/AKfycbwbSwxdcpUKZtKUMmMULr1XkMHo3mhs8Kysr6a-PZ4eIyBuMeW3I52DDXwGybevjSO3/exec)**
+
+Share that link with the engineers — no sign-in needed, just fill in and submit.
+
 ## Repository contents
 
 | File | Purpose |
