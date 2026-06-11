@@ -1,3 +1,6 @@
+<!DOCTYPE html>
+<html>
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PS Daily Time Check-in</title>
@@ -60,6 +63,8 @@
   .submit:disabled{opacity:.5;cursor:not-allowed}
   .hint{font-size:12px;color:var(--muted);margin:6px 2px 0}
   .err{color:var(--danger);font-size:12.5px;margin:8px 2px 0;display:none}
+  .warnbar{background:#FEF6EC;border:1px solid #F0D9B5;border-radius:10px;
+    padding:11px 14px;margin:0 0 14px;font-size:12.5px;color:#8a5a12}
   /* responses */
   .stat-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
   .stat{flex:1 1 120px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px}
@@ -84,6 +89,8 @@
   @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
   @media(max-width:520px){.row>.field{flex-basis:100%}}
 </style>
+</head>
+<body>
 
 <div class="wrap">
   <header class="top">
@@ -98,6 +105,10 @@
 
   <!-- LOG VIEW -->
   <div id="view-log">
+    <div id="offline-warn" class="warnbar hidden">
+      This page isn't connected to the time-log backend. Open the form through its
+      published web-app link to submit.
+    </div>
     <div id="form-area">
       <div class="card">
         <div class="row">
@@ -155,31 +166,19 @@ const MATCH = ["Yes, as scheduled","Partly","No — different work","Was schedul
 let pCount = 0;
 const MAX_P = 5;
 
-// ---- storage: use Claude persistent storage if available, else in-memory (session only) ----
-const mem = {};
-let backend = null;
-async function ensureBackend(){
-  if(backend) return backend;
-  try{
-    if(window.storage && typeof window.storage.set === 'function'){
-      await window.storage.set('__probe__','1',true);
-      try{ await window.storage.delete('__probe__',true); }catch(e){}
-      backend='cloud';
-    } else { backend='mem'; }
-  }catch(e){ backend='mem'; }
-  return backend;
+// ---- backend: Google Apps Script (google.script.run) ----
+const IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
+function gs(fn){
+  const args = Array.prototype.slice.call(arguments, 1);
+  return new Promise(function(resolve, reject){
+    if(!IS_GAS){ reject(new Error('Not connected to the backend')); return; }
+    google.script.run
+      .withSuccessHandler(resolve)
+      .withFailureHandler(function(err){
+        reject(err instanceof Error ? err : new Error((err && err.message) || String(err)));
+      })[fn].apply(null, args);
+  });
 }
-async function storeSet(k,v){ const b=await ensureBackend();
-  if(b==='cloud') return window.storage.set(k,v,true); mem[k]=v; return true; }
-async function storeList(prefix){ const b=await ensureBackend();
-  if(b==='cloud') return window.storage.list(prefix,true);
-  return {keys:Object.keys(mem).filter(k=>k.startsWith(prefix))}; }
-async function storeGet(k){ const b=await ensureBackend();
-  if(b==='cloud') return window.storage.get(k,true);
-  return mem[k]!==undefined?{value:mem[k]}:null; }
-async function storeDelete(k){ const b=await ensureBackend();
-  if(b==='cloud') return window.storage.delete(k,true); delete mem[k]; return true; }
-function isMem(){ return backend==='mem'; }
 
 function hourOpts(arr){
   return '<option value="">Select…</option>' +
@@ -295,10 +294,8 @@ async function submitForm(){
   }
   const btn=document.getElementById('submitBtn');
   btn.disabled=true; btn.textContent='Saving…';
-  const rec={...d, submittedAt:new Date().toISOString()};
-  const key='resp:'+Date.now();
   try{
-    await storeSet(key, JSON.stringify(rec));
+    await gs('submitTimesheet', d);
     showSuccess(d);
   }catch(e){
     btn.disabled=false; btn.textContent='Submit';
@@ -341,65 +338,85 @@ function setView(v){
   if(!log) loadResponses();
 }
 
+function renderKeyGate(msg){
+  const box=document.getElementById('resp-content');
+  box.innerHTML=`<div class="card" style="max-width:420px">
+    <div class="field"><label class="req" for="adminKeyIn">Admin key</label>
+      <input type="password" id="adminKeyIn" placeholder="Enter admin key"
+        onkeydown="if(event.key==='Enter')unlockResponses()">
+      ${msg?`<p class="err" style="display:block">${escapeHtml(msg)}</p>`:''}
+      <p class="hint">The admin key is set in Code.gs (ADMIN_KEY) and is only needed to view responses.</p></div>
+    <button class="submit" onclick="unlockResponses()">View responses</button>
+  </div>`;
+}
+function unlockResponses(){
+  const v=document.getElementById('adminKeyIn').value.trim();
+  if(!v) return;
+  try{localStorage.setItem('psAdminKey', v);}catch(e){window._key=v;}
+  loadResponses();
+}
+function getKey(){
+  try{return localStorage.getItem('psAdminKey')||window._key||'';}
+  catch(e){return window._key||'';}
+}
+function dropKey(){
+  try{localStorage.removeItem('psAdminKey');}catch(e){}
+  window._key='';
+}
+
 async function loadResponses(){
   const box=document.getElementById('resp-content');
+  const key=getKey();
+  if(!key){renderKeyGate();return;}
   box.innerHTML='<p class="empty">Loading…</p>';
-  let recs=[];
+  let rows=[];
   try{
-    const list=await storeList('resp:');
-    const keys=(list&&list.keys)?list.keys:[];
-    for(const k of keys){
-      try{const r=await storeGet(k); if(r&&r.value){const o=JSON.parse(r.value);o._key=k;recs.push(o);}}catch(e){}
-    }
-  }catch(e){box.innerHTML='<p class="empty">Could not load responses.</p>';return;}
-  if(recs.length===0){box.innerHTML='<p class="empty">No submissions yet. They\'ll appear here as the team replies.</p>';return;}
-  recs.sort((a,b)=>(b.submittedAt||'').localeCompare(a.submittedAt||''));
+    rows=await gs('getResponses', key);
+  }catch(e){
+    if(/invalid admin key/i.test(e.message||'')){dropKey();renderKeyGate('Wrong key — try again.');return;}
+    box.innerHTML='<p class="empty">Could not load responses.</p>';return;
+  }
+  if(rows.length===0){box.innerHTML='<p class="empty">No submissions yet. They\'ll appear here as the team replies.</p>';return;}
+  rows.sort((a,b)=>(b.submittedAt||'').localeCompare(a.submittedAt||''));
 
-  let rows=0,tb=0,tn=0; const engs=new Set();
-  recs.forEach(r=>{engs.add(r.eng);r.projects.forEach(p=>{rows++;tb+=p.bill;tn+=p.non;});});
+  let tb=0,tn=0; const engs=new Set();
+  rows.forEach(r=>{engs.add(r.eng);tb+=r.bill;tn+=r.non;});
   const r2=x=>Math.round(x*100)/100;
 
-  const banner = isMem()
-    ? `<div class="card" style="background:#FEF6EC;border-color:#F0D9B5;padding:11px 14px;margin-bottom:14px;font-size:12.5px;color:#8a5a12">
-        Preview mode — persistent storage isn't active here, so these submissions are kept for this browser session only. Publish the artifact on a plan with storage to collect and keep responses from the team.</div>`
-    : '';
-
-  let html=banner+`<div class="stat-row">
+  let html=`<div class="stat-row">
     <div class="stat"><div class="n">${engs.size}</div><div class="l">Engineers</div></div>
     <div class="stat"><div class="n">${r2(tb)}h</div><div class="l">Billable</div></div>
     <div class="stat"><div class="n">${r2(tn)}h</div><div class="l">Non-billable</div></div>
-    <div class="stat"><div class="n">${rows}</div><div class="l">Project entries</div></div>
+    <div class="stat"><div class="n">${rows.length}</div><div class="l">Project entries</div></div>
   </div>
   <div class="toolbar">
     <button class="btn" onclick="loadResponses()">Refresh</button>
     <button class="btn" onclick="downloadCSV()">Download CSV</button>
-    <button class="btn warn" onclick="clearAll()">Clear all</button>
+    <button class="btn warn" onclick="clearAll(this)">Clear all</button>
   </div>
   <div class="tbl-wrap"><table><thead><tr>
     <th>Date</th><th>Engineer</th><th>Project</th><th>Customer</th>
     <th>Bill</th><th>Non-bill</th><th>NB type</th><th>Matched?</th><th>Notes</th>
   </tr></thead><tbody>`;
-  recs.forEach(r=>{
-    r.projects.forEach(p=>{
-      html+=`<tr><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.eng)}</td>
-      <td>${escapeHtml(p.project)}</td><td>${escapeHtml(p.customer)}</td>
-      <td>${p.bill||''}</td><td>${p.non||''}</td><td>${escapeHtml(p.nbtype==='None'?'':p.nbtype)}</td>
-      <td>${escapeHtml(p.match||'')}</td><td>${escapeHtml(p.notes||'')}</td></tr>`;
-    });
+  rows.forEach(r=>{
+    html+=`<tr><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.eng)}</td>
+    <td>${escapeHtml(r.project)}</td><td>${escapeHtml(r.customer)}</td>
+    <td>${r.bill||''}</td><td>${r.non||''}</td><td>${escapeHtml(r.nbtype||'')}</td>
+    <td>${escapeHtml(r.match||'')}</td><td>${escapeHtml(r.notes||'')}</td></tr>`;
   });
   html+='</tbody></table></div>';
   box.innerHTML=html;
-  window._recs=recs;
+  window._rows=rows;
 }
 
 function downloadCSV(){
-  const recs=window._recs||[];
+  const rows=window._rows||[];
   const head=['Date','Engineer','Project','Customer','Billable Hrs','Non-Billable Hrs','Non-Billable Type','Matched Schedule','Notes','Submitted At'];
   const lines=[head.join(',')];
-  recs.forEach(r=>r.projects.forEach(p=>{
-    lines.push([r.date,r.eng,p.project,p.customer,p.bill,p.non,(p.nbtype==='None'?'':p.nbtype),p.match||'',p.notes||'',r.submittedAt]
+  rows.forEach(r=>{
+    lines.push([r.date,r.eng,r.project,r.customer,r.bill,r.non,r.nbtype||'',r.match||'',r.notes||'',r.submittedAt]
       .map(csv).join(','));
-  }));
+  });
   const blob=new Blob([lines.join('\n')],{type:'text/csv'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
@@ -408,13 +425,18 @@ function downloadCSV(){
 }
 function csv(v){v=(v==null?'':String(v));return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
 
-async function clearAll(){
-  if(!confirm('Delete ALL submissions? This cannot be undone.')) return;
-  try{
-    const list=await storeList('resp:');
-    const keys=(list&&list.keys)?list.keys:[];
-    for(const k of keys){try{await storeDelete(k);}catch(e){}}
-  }catch(e){}
+// confirm() can be blocked inside the Apps Script iframe, so use a two-step button instead
+let clearArmed=false;
+async function clearAll(btn){
+  if(!clearArmed){
+    clearArmed=true;
+    btn.textContent='Really delete ALL?';
+    setTimeout(()=>{clearArmed=false;btn.textContent='Clear all';},4000);
+    return;
+  }
+  clearArmed=false;
+  btn.disabled=true; btn.textContent='Deleting…';
+  try{await gs('clearAllResponses', getKey());}catch(e){}
   loadResponses();
 }
 
@@ -422,5 +444,8 @@ function escapeHtml(s){return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':
 
 // init
 document.getElementById('date').value=new Date().toISOString().slice(0,10);
+if(!IS_GAS) document.getElementById('offline-warn').classList.remove('hidden');
 addProject();
 </script>
+</body>
+</html>
