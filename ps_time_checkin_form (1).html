@@ -1,0 +1,426 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PS Daily Time Check-in</title>
+<style>
+  :root{
+    --navy:#1F3864; --steel:#2E5090; --bg:#F7F8FB; --card:#FFFFFF;
+    --ink:#1F2937; --muted:#64748B; --line:#E2E8F0;
+    --bill:#15803D; --bill-bg:#ECFDF3; --nonbill:#B45309; --nonbill-bg:#FEF6EC;
+    --danger:#B42318;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:Arial,"Segoe UI",system-ui,sans-serif;font-size:15px;line-height:1.45;}
+  .wrap{max-width:640px;margin:0 auto;padding:0 18px 140px;}
+  header.top{background:var(--navy);color:#fff;border-radius:0 0 14px 14px;
+    padding:20px 22px 18px;margin:0 -18px 22px;}
+  .eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#AEC2E6;margin:0 0 4px}
+  header.top h1{margin:0;font-size:21px;font-weight:700;letter-spacing:-.01em}
+  header.top p{margin:6px 0 0;color:#CBD7EC;font-size:13px}
+  .tabs{display:flex;gap:6px;margin-top:16px}
+  .tab{flex:0 0 auto;background:rgba(255,255,255,.12);color:#fff;border:0;cursor:pointer;
+    padding:8px 16px;border-radius:8px;font:inherit;font-size:13.5px;font-weight:600}
+  .tab.active{background:#fff;color:var(--navy)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:18px;margin:0 0 14px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .row > .field{flex:1 1 0;min-width:0}
+  label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin:0 0 5px}
+  .req::after{content:" *";color:var(--danger)}
+  input,select,textarea{width:100%;font:inherit;color:var(--ink);background:#fff;
+    border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--steel);outline-offset:0;border-color:var(--steel)}
+  textarea{resize:vertical;min-height:54px}
+  .field{margin-bottom:12px}
+  .field:last-child{margin-bottom:0}
+  .proj{position:relative}
+  .proj-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 14px}
+  .proj-tag{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--navy);background:#EEF3FB;padding:4px 10px;border-radius:999px}
+  .remove{background:none;border:0;color:var(--danger);font:inherit;font-size:12.5px;
+    cursor:pointer;font-weight:600;padding:4px}
+  .hours-pair .field{margin-bottom:0}
+  .otherbox{margin-top:8px}
+  .add{width:100%;background:#fff;border:1.5px dashed #B9C5DA;color:var(--navy);
+    font:inherit;font-weight:600;font-size:14px;padding:12px;border-radius:10px;cursor:pointer}
+  .add:hover{background:#F2F6FC}
+  .add:disabled{opacity:.45;cursor:not-allowed}
+  .tally{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
+    box-shadow:0 -2px 10px rgba(16,24,40,.06)}
+  .tally .inner{max-width:640px;margin:0 auto;padding:12px 18px;
+    display:flex;align-items:center;gap:14px}
+  .chip{font-size:12.5px;font-weight:600;padding:5px 11px;border-radius:8px;white-space:nowrap}
+  .chip.b{color:var(--bill);background:var(--bill-bg)}
+  .chip.n{color:var(--nonbill);background:var(--nonbill-bg)}
+  .chip.t{color:var(--navy);background:#EEF3FB}
+  .grow{flex:1 1 auto}
+  .submit{background:var(--navy);color:#fff;border:0;font:inherit;font-weight:700;font-size:15px;
+    padding:11px 22px;border-radius:9px;cursor:pointer}
+  .submit:hover{background:#16294a}
+  .submit:disabled{opacity:.5;cursor:not-allowed}
+  .hint{font-size:12px;color:var(--muted);margin:6px 2px 0}
+  .err{color:var(--danger);font-size:12.5px;margin:8px 2px 0;display:none}
+  /* responses */
+  .stat-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .stat{flex:1 1 120px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .stat .n{font-size:22px;font-weight:700;color:var(--navy)}
+  .stat .l{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700}
+  .tbl-wrap{overflow-x:auto;background:#fff;border:1px solid var(--line);border-radius:10px}
+  .toolbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  .btn{background:#fff;border:1px solid var(--line);color:var(--navy);font:inherit;font-weight:600;
+    font-size:13px;padding:8px 14px;border-radius:8px;cursor:pointer}
+  .btn:hover{background:#F2F6FC}
+  .btn.warn{color:var(--danger);border-color:#F1C7C2}
+  .empty{text-align:center;color:var(--muted);padding:40px 12px}
+  .success{text-align:center;padding:34px 18px}
+  .success .tick{width:54px;height:54px;border-radius:50%;background:var(--bill-bg);color:var(--bill);
+    display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 14px}
+  .success h2{margin:0 0 6px;color:var(--navy)}
+  .hidden{display:none!important}
+  @media (prefers-reduced-motion:no-preference){.card,.success{animation:fade .25s ease}}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  @media(max-width:520px){.row>.field{flex-basis:100%}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">Nostra · Professional Services</p>
+    <h1>Daily Time Check-in</h1>
+    <p id="subhead">Log what you worked on today — takes about a minute.</p>
+    <div class="tabs">
+      <button class="tab active" id="tab-log" onclick="setView('log')">Log time</button>
+      <button class="tab" id="tab-resp" onclick="setView('resp')">Responses</button>
+    </div>
+  </header>
+
+  <!-- LOG VIEW -->
+  <div id="view-log">
+    <div id="form-area">
+      <div class="card">
+        <div class="row">
+          <div class="field">
+            <label class="req" for="eng">Your name</label>
+            <select id="eng" onchange="toggleOtherName()">
+              <option value="">Select…</option>
+              <option>Adam Waring</option><option>Damir Juric</option><option>Darragh Daly</option>
+              <option>David Maher</option><option>John Connole</option><option>John Hanrahan</option>
+              <option>JP Cuddihy</option><option>Lukasz Pazurek</option><option>Mark Bennett</option>
+              <option>Matthew Gordon</option><option>Octavian Vesa</option><option>Oisin O'Hare</option>
+              <option>Paul Donnelly</option><option>Reinier Hoogers</option><option>Sheen Kurian</option>
+              <option value="__other">Other…</option>
+            </select>
+            <input id="engOther" class="otherbox hidden" placeholder="Type your name">
+          </div>
+          <div class="field">
+            <label class="req" for="date">Date</label>
+            <input type="date" id="date">
+          </div>
+        </div>
+      </div>
+
+      <div id="projects"></div>
+
+      <button class="add" id="addBtn" onclick="addProject()">+ Add another project</button>
+      <p class="err" id="formErr"></p>
+    </div>
+
+    <div id="success" class="hidden"></div>
+  </div>
+
+  <!-- RESPONSES VIEW -->
+  <div id="view-resp" class="hidden">
+    <div id="resp-content"><p class="empty">Loading…</p></div>
+  </div>
+</div>
+
+<!-- TALLY FOOTER -->
+<div class="tally" id="tally">
+  <div class="inner">
+    <span class="chip b">Billable <b id="tBill">0</b>h</span>
+    <span class="chip n">Non-billable <b id="tNon">0</b>h</span>
+    <span class="chip t">Total <b id="tTot">0</b>h</span>
+    <span class="grow"></span>
+    <button class="submit" id="submitBtn" onclick="submitForm()">Submit</button>
+  </div>
+</div>
+
+<script>
+const HOURS_B = [0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8];
+const HOURS_N = [0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8];
+const NB_TYPES = ["None","Admin","Internal meeting","Training","Support","Travel","Other"];
+const MATCH = ["Yes, as scheduled","Partly","No — different work","Was scheduled but didn't happen"];
+let pCount = 0;
+const MAX_P = 5;
+
+// ---- storage: use Claude persistent storage if available, else in-memory (session only) ----
+const mem = {};
+let backend = null;
+async function ensureBackend(){
+  if(backend) return backend;
+  try{
+    if(window.storage && typeof window.storage.set === 'function'){
+      await window.storage.set('__probe__','1',true);
+      try{ await window.storage.delete('__probe__',true); }catch(e){}
+      backend='cloud';
+    } else { backend='mem'; }
+  }catch(e){ backend='mem'; }
+  return backend;
+}
+async function storeSet(k,v){ const b=await ensureBackend();
+  if(b==='cloud') return window.storage.set(k,v,true); mem[k]=v; return true; }
+async function storeList(prefix){ const b=await ensureBackend();
+  if(b==='cloud') return window.storage.list(prefix,true);
+  return {keys:Object.keys(mem).filter(k=>k.startsWith(prefix))}; }
+async function storeGet(k){ const b=await ensureBackend();
+  if(b==='cloud') return window.storage.get(k,true);
+  return mem[k]!==undefined?{value:mem[k]}:null; }
+async function storeDelete(k){ const b=await ensureBackend();
+  if(b==='cloud') return window.storage.delete(k,true); delete mem[k]; return true; }
+function isMem(){ return backend==='mem'; }
+
+function hourOpts(arr){
+  return '<option value="">Select…</option>' +
+    arr.map(h=>`<option value="${h}">${h}</option>`).join('') +
+    '<option value="__other">Other…</option>';
+}
+
+function addProject(){
+  if(pCount>=MAX_P) return;
+  pCount++;
+  const i=pCount;
+  const div=document.createElement('div');
+  div.className='card proj';
+  div.id='proj-'+i;
+  div.innerHTML=`
+    <div class="proj-head">
+      <span class="proj-tag">Project ${i}</span>
+      ${i>1?`<button class="remove" onclick="removeProject(${i})">Remove</button>`:''}
+    </div>
+    <div class="row">
+      <div class="field"><label class="req">Project name</label>
+        <input data-f="project" placeholder="e.g. Cloud Migration"></div>
+      <div class="field"><label class="req">Customer name</label>
+        <input data-f="customer" placeholder="e.g. Connect Credit Union"></div>
+    </div>
+    <div class="row hours-pair">
+      <div class="field"><label class="req">Billable hours</label>
+        <select data-f="bill" onchange="otherHours(this);recalc()">${hourOpts(HOURS_B)}</select>
+        <input class="otherbox hidden" type="number" step="0.25" min="0" data-f="billOther"
+          placeholder="hours" oninput="recalc()"></div>
+      <div class="field"><label>Non-billable hours</label>
+        <select data-f="non" onchange="otherHours(this);recalc()">${hourOpts(HOURS_N)}</select>
+        <input class="otherbox hidden" type="number" step="0.25" min="0" data-f="nonOther"
+          placeholder="hours" oninput="recalc()"></div>
+    </div>
+    <div class="field"><label>Type of non-billable time</label>
+      <select data-f="nbtype">${NB_TYPES.map(t=>`<option>${t}</option>`).join('')}</select></div>
+    <div class="field"><label>Did this match your Float schedule?</label>
+      <select data-f="match"><option value="">—</option>${MATCH.map(m=>`<option>${m}</option>`).join('')}</select></div>
+    <div class="field"><label>Notes / explanation</label>
+      <textarea data-f="notes" placeholder="Anything that didn't go to plan, blockers, or why it couldn't be finished"></textarea></div>
+  `;
+  document.getElementById('projects').appendChild(div);
+  document.getElementById('addBtn').disabled = pCount>=MAX_P;
+  recalc();
+}
+
+function removeProject(i){
+  const el=document.getElementById('proj-'+i);
+  if(el) el.remove();
+  document.getElementById('addBtn').disabled=false;
+  recalc();
+}
+
+function otherHours(sel){
+  const other=sel.parentElement.querySelector('.otherbox');
+  if(sel.value==='__other'){other.classList.remove('hidden');}
+  else{other.classList.add('hidden');other.value='';}
+}
+function toggleOtherName(){
+  const o=document.getElementById('engOther');
+  document.getElementById('eng').value==='__other'?o.classList.remove('hidden'):o.classList.add('hidden');
+}
+
+function hv(sel,otherSel){
+  const v=sel.value;
+  if(v==='__other'){const o=parseFloat(otherSel.value);return isNaN(o)?0:o;}
+  return v===''?0:parseFloat(v);
+}
+function recalc(){
+  let b=0,n=0;
+  document.querySelectorAll('.proj').forEach(p=>{
+    b+=hv(p.querySelector('[data-f=bill]'),p.querySelector('[data-f=billOther]'));
+    n+=hv(p.querySelector('[data-f=non]'),p.querySelector('[data-f=nonOther]'));
+  });
+  const r=x=>Math.round(x*100)/100;
+  document.getElementById('tBill').textContent=r(b);
+  document.getElementById('tNon').textContent=r(n);
+  document.getElementById('tTot').textContent=r(b+n);
+}
+
+function collect(){
+  const engSel=document.getElementById('eng').value;
+  const eng = engSel==='__other'?document.getElementById('engOther').value.trim():engSel;
+  const date=document.getElementById('date').value;
+  const projects=[];
+  document.querySelectorAll('.proj').forEach(p=>{
+    const g=f=>p.querySelector(`[data-f=${f}]`);
+    projects.push({
+      project:g('project').value.trim(),
+      customer:g('customer').value.trim(),
+      bill:hv(g('bill'),g('billOther')),
+      non:hv(g('non'),g('nonOther')),
+      nbtype:g('nbtype').value,
+      match:g('match').value,
+      notes:g('notes').value.trim()
+    });
+  });
+  return {eng,date,projects};
+}
+
+async function submitForm(){
+  const err=document.getElementById('formErr');
+  err.style.display='none';
+  const d=collect();
+  if(!d.eng){return showErr('Please select your name.');}
+  if(!d.date){return showErr('Please pick a date.');}
+  if(d.projects.length===0){return showErr('Add at least one project.');}
+  for(let i=0;i<d.projects.length;i++){
+    const p=d.projects[i];
+    if(!p.project||!p.customer) return showErr(`Project ${i+1}: project and customer name are required.`);
+    if(p.bill===0 && p.non===0) return showErr(`Project ${i+1}: enter billable or non-billable hours.`);
+  }
+  const btn=document.getElementById('submitBtn');
+  btn.disabled=true; btn.textContent='Saving…';
+  const rec={...d, submittedAt:new Date().toISOString()};
+  const key='resp:'+Date.now();
+  try{
+    await storeSet(key, JSON.stringify(rec));
+    showSuccess(d);
+  }catch(e){
+    btn.disabled=false; btn.textContent='Submit';
+    showErr('Could not save — please try again.');
+  }
+}
+function showErr(m){const e=document.getElementById('formErr');e.textContent=m;e.style.display='block';
+  e.scrollIntoView({behavior:'smooth',block:'center'});return false;}
+
+function showSuccess(d){
+  document.getElementById('form-area').classList.add('hidden');
+  document.getElementById('tally').classList.add('hidden');
+  const s=document.getElementById('success');
+  const tot=d.projects.reduce((a,p)=>a+p.bill+p.non,0);
+  s.className='card success';
+  s.innerHTML=`<div class="tick">✓</div><h2>Logged, thanks ${escapeHtml(d.eng.split(' ')[0])}!</h2>
+    <p class="hint">${d.projects.length} project${d.projects.length>1?'s':''} · ${Math.round(tot*100)/100}h recorded for ${d.date}.</p>
+    <p style="margin-top:16px"><button class="submit" onclick="resetForm()">Log another day</button></p>`;
+}
+function resetForm(){
+  document.getElementById('projects').innerHTML='';
+  document.getElementById('success').className='hidden';
+  document.getElementById('form-area').classList.remove('hidden');
+  document.getElementById('tally').classList.remove('hidden');
+  const b=document.getElementById('submitBtn');b.disabled=false;b.textContent='Submit';
+  pCount=0; document.getElementById('addBtn').disabled=false;
+  addProject(); recalc();
+}
+
+function setView(v){
+  const log=v==='log';
+  document.getElementById('view-log').classList.toggle('hidden',!log);
+  document.getElementById('view-resp').classList.toggle('hidden',log);
+  document.getElementById('tally').classList.toggle('hidden',!log);
+  document.getElementById('tab-log').classList.toggle('active',log);
+  document.getElementById('tab-resp').classList.toggle('active',!log);
+  document.getElementById('subhead').textContent = log
+    ? 'Log what you worked on today — takes about a minute.'
+    : 'Submissions collected from the team (admin view).';
+  if(!log) loadResponses();
+}
+
+async function loadResponses(){
+  const box=document.getElementById('resp-content');
+  box.innerHTML='<p class="empty">Loading…</p>';
+  let recs=[];
+  try{
+    const list=await storeList('resp:');
+    const keys=(list&&list.keys)?list.keys:[];
+    for(const k of keys){
+      try{const r=await storeGet(k); if(r&&r.value){const o=JSON.parse(r.value);o._key=k;recs.push(o);}}catch(e){}
+    }
+  }catch(e){box.innerHTML='<p class="empty">Could not load responses.</p>';return;}
+  if(recs.length===0){box.innerHTML='<p class="empty">No submissions yet. They\'ll appear here as the team replies.</p>';return;}
+  recs.sort((a,b)=>(b.submittedAt||'').localeCompare(a.submittedAt||''));
+
+  let rows=0,tb=0,tn=0; const engs=new Set();
+  recs.forEach(r=>{engs.add(r.eng);r.projects.forEach(p=>{rows++;tb+=p.bill;tn+=p.non;});});
+  const r2=x=>Math.round(x*100)/100;
+
+  const banner = isMem()
+    ? `<div class="card" style="background:#FEF6EC;border-color:#F0D9B5;padding:11px 14px;margin-bottom:14px;font-size:12.5px;color:#8a5a12">
+        Preview mode — persistent storage isn't active here, so these submissions are kept for this browser session only. Publish the artifact on a plan with storage to collect and keep responses from the team.</div>`
+    : '';
+
+  let html=banner+`<div class="stat-row">
+    <div class="stat"><div class="n">${engs.size}</div><div class="l">Engineers</div></div>
+    <div class="stat"><div class="n">${r2(tb)}h</div><div class="l">Billable</div></div>
+    <div class="stat"><div class="n">${r2(tn)}h</div><div class="l">Non-billable</div></div>
+    <div class="stat"><div class="n">${rows}</div><div class="l">Project entries</div></div>
+  </div>
+  <div class="toolbar">
+    <button class="btn" onclick="loadResponses()">Refresh</button>
+    <button class="btn" onclick="downloadCSV()">Download CSV</button>
+    <button class="btn warn" onclick="clearAll()">Clear all</button>
+  </div>
+  <div class="tbl-wrap"><table><thead><tr>
+    <th>Date</th><th>Engineer</th><th>Project</th><th>Customer</th>
+    <th>Bill</th><th>Non-bill</th><th>NB type</th><th>Matched?</th><th>Notes</th>
+  </tr></thead><tbody>`;
+  recs.forEach(r=>{
+    r.projects.forEach(p=>{
+      html+=`<tr><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.eng)}</td>
+      <td>${escapeHtml(p.project)}</td><td>${escapeHtml(p.customer)}</td>
+      <td>${p.bill||''}</td><td>${p.non||''}</td><td>${escapeHtml(p.nbtype==='None'?'':p.nbtype)}</td>
+      <td>${escapeHtml(p.match||'')}</td><td>${escapeHtml(p.notes||'')}</td></tr>`;
+    });
+  });
+  html+='</tbody></table></div>';
+  box.innerHTML=html;
+  window._recs=recs;
+}
+
+function downloadCSV(){
+  const recs=window._recs||[];
+  const head=['Date','Engineer','Project','Customer','Billable Hrs','Non-Billable Hrs','Non-Billable Type','Matched Schedule','Notes','Submitted At'];
+  const lines=[head.join(',')];
+  recs.forEach(r=>r.projects.forEach(p=>{
+    lines.push([r.date,r.eng,p.project,p.customer,p.bill,p.non,(p.nbtype==='None'?'':p.nbtype),p.match||'',p.notes||'',r.submittedAt]
+      .map(csv).join(','));
+  }));
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='ps_time_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+}
+function csv(v){v=(v==null?'':String(v));return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+
+async function clearAll(){
+  if(!confirm('Delete ALL submissions? This cannot be undone.')) return;
+  try{
+    const list=await storeList('resp:');
+    const keys=(list&&list.keys)?list.keys:[];
+    for(const k of keys){try{await storeDelete(k);}catch(e){}}
+  }catch(e){}
+  loadResponses();
+}
+
+function escapeHtml(s){return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+// init
+document.getElementById('date').value=new Date().toISOString().slice(0,10);
+addProject();
+</script>
